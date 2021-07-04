@@ -1,0 +1,14 @@
+.ipynb_checkpoints
+build/
+.vscode/
+/lib/libgtest.so
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+_deps
+*~
