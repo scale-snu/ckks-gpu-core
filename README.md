@@ -1,5 +1,5 @@
 ## (Experimental) CKKS-GPU-CORE
-This repository includes GPU implementations of the core functions for CKKS (e.g., base conversions, NTT, key-switching, etc.) to reproduce the results in the paper **Over 100x Faster Bootstrapping in Fully Homomorphic Encryption through Memory-centric Optimization with GPUs** in TCHES 2021.
+This repository includes GPU implementations of the core functions for CKKS (e.g., base conversions, NTT, key-switching, etc.) to reproduce the results in the paper **Over 100x Faster Bootstrapping in Fully Homomorphic Encryption through Memory-centric Optimization with GPUs** submitted to TCHES 2021.
 
 The implementations included largely contribute to [CRYPTOLAB INC.](https://www.cryptolab.co.kr/eng/) and [HEAAN](https://github.com/snucrypto/HEAAN).
 
