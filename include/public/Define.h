@@ -6,8 +6,6 @@
  */
 #pragma once
 
-#include <x86intrin.h>
-
 #include <cstdint>
 #include <string>
 #include <chrono>
