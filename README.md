@@ -12,6 +12,12 @@ Tested under ubuntu 18.04 with g++ 9.3.0 and NVIDIA V100.
 ### How to build
 Check out this [notebook](Run.ipynb).
 
+Alternatively, use the included dockerfile (make sure [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-docker) is installed).
+```sh
+docker build -t ckks-gpu-core .
+docker run --gpus all --rm ckks-gpu-core build/benchmark/Benchmark
+```
+
 ### Contact
 Wonkyung Jung
 jungwk@scale.snu.ac.kr
