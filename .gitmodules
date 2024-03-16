@@ -1,0 +1,7 @@
+[submodule "thirdparty/openfhe"]
+	path = thirdparty/openfhe
+	url = git@github.com:openfheorg/openfhe-development.git
+[submodule "thirdparty/SEAL"]
+	path = thirdparty/SEAL
+	url = git@github.com:microsoft/SEAL.git
+	ignore = dirty
