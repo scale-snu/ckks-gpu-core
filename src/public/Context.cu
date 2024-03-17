@@ -259,6 +259,7 @@ Context::Context(const Parameter &param)
   GenEncodeParams();
 }
 
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 void Context::GenEncodeParams(){
   // make en/decode-related parameters
   int Nh = degree__ >> 1;
@@ -326,6 +327,7 @@ void Context::GenModDownParams() {
   }
 }
 
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 void Context::arrayBitReverse(std::complex<double>* vals, const long size) const {
 	for (long i = 1, j = 0; i < size; ++i) {
 		long bit = size >> 1;
@@ -341,6 +343,7 @@ void Context::arrayBitReverse(std::complex<double>* vals, const long size) const
 	}
 }
 
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 void Context::fftSpecial(std::complex<double> *vals, const long size) const{
   uint64_t M = degree__ << 1;
   arrayBitReverse(vals, size);
@@ -360,6 +363,7 @@ void Context::fftSpecial(std::complex<double> *vals, const long size) const{
 	}
 }  
 
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 void Context::fftSpecialInv(std::complex<double> *vals, const long size) const{
   uint64_t M = degree__ << 1;
   for (long len = size; len >= 1; len >>= 1) {
@@ -383,6 +387,7 @@ void Context::fftSpecialInv(std::complex<double> *vals, const long size) const{
   }
 }
   
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 // Note that `mvec` is overwritten.
 void Context::Encode(uint64_t *out, std::complex<double> *mvec, const int slot) const{
   // fft
@@ -406,6 +411,7 @@ void Context::Encode(uint64_t *out, std::complex<double> *mvec, const int slot) 
   }
 }
 
+// https://github.com/KyoohyungHan/FullRNS-HEAAN.git
 // Note that `a` is overwritten.
 void Context::Decode(std::complex<double> *out, uint64_t *a, const int slots) const{
   const int Nh = degree__ >> 1;
@@ -425,7 +431,6 @@ void Context::Decode(std::complex<double> *out, uint64_t *a, const int slots) co
 	}
 	fftSpecial(out, slots);
 }
-
 
 // NTT is made up of two NTT stages. Here the 'first' means the first NTT
 // stage in NTT (so it becomes second in view of iNTT).
