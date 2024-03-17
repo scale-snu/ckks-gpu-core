@@ -6,6 +6,7 @@
  */
 #pragma once
 
+#include <complex>
 #include <tuple>
 
 #include "Define.h"
@@ -31,6 +32,8 @@ class Context {
 
  public:
   Context(const Parameter& param);
+  void Encode(uint64_t *out, std::complex<double> *mvec, const int slot) const;
+  void Decode(std::complex<double> *out, uint64_t *v, const int slot) const;
   void KeySwitch(const DeviceVector& modup_out, const EvaluationKey& evk,
                  DeviceVector& sum_ax, DeviceVector& sum_bx) const;
   void PMult(const Ciphertext&, const Plaintext&, Ciphertext&) const;
@@ -84,6 +87,10 @@ class Context {
   }
   void GenModUpParams();
   void GenModDownParams();
+  void GenEncodeParams();
+  void fftSpecial(std::complex<double> *vals, const long size) const;
+  void fftSpecialInv(std::complex<double> *vals, const long size) const;
+  void arrayBitReverse(std::complex<double> *vals, const long size) const;
 
   std::shared_ptr<MemoryPool> pool__;
   int degree__;
@@ -112,6 +119,10 @@ class Context {
   std::vector<DeviceVector> prod_q_i_mod_q_j_moddown__;
   std::vector<DeviceVector> prod_inv_moddown__;
   std::vector<DeviceVector> prod_inv_shoup_moddown__;
+
+  // For en/decode
+  uint64_t *rotGroup;
+  std::complex<double> *ksiPows;
 };
 
 }  // namespace ckks

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <numeric>
 #include <tuple>
 #include <memory>
@@ -255,6 +256,27 @@ Context::Context(const Parameter &param)
   // make base-conversion-related parameters
   GenModUpParams();
   GenModDownParams();
+  GenEncodeParams();
+}
+
+void Context::GenEncodeParams(){
+  // make en/decode-related parameters
+  int Nh = degree__ >> 1;
+  int M = degree__ << 1;
+
+  rotGroup = new uint64_t[Nh];
+  uint64_t fivePows = 1;
+  for (int i = 0; i < Nh; i++) {
+    rotGroup[i] = fivePows;
+    fivePows = (fivePows * 5) % (degree__ << 1);
+  }
+
+  ksiPows = new std::complex<double>[M + 1];
+  for (int i = 0; i < M; i++) {
+    double theta = 2 * M_PI * i / M;
+    ksiPows[i] = std::complex<double>(cos(theta), sin(theta));
+  }
+  ksiPows[M] = ksiPows[0];
 }
 
 void Context::GenModUpParams() {
@@ -303,6 +325,107 @@ void Context::GenModDownParams() {
     prod_inv_shoup_moddown__.push_back(DeviceVector(prod_shoup));
   }
 }
+
+void Context::arrayBitReverse(std::complex<double>* vals, const long size) const {
+	for (long i = 1, j = 0; i < size; ++i) {
+		long bit = size >> 1;
+		for (; j >= bit; bit >>= 1) {
+			j -= bit;
+		}
+		j += bit;
+		if (i < j) {
+      std::complex<double> tmp = vals[i];
+      vals[i] = vals[j];
+      vals[j] = tmp;
+		}
+	}
+}
+
+void Context::fftSpecial(std::complex<double> *vals, const long size) const{
+  uint64_t M = degree__ << 1;
+  arrayBitReverse(vals, size);
+	for (long len = 2; len <= size; len <<= 1) {
+		for (long i = 0; i < size; i += len) {
+			long lenh = len >> 1;
+			long lenq = len << 2;
+			for (long j = 0; j < lenh; ++j) {
+				long idx = ((rotGroup[j] % lenq)) * M / lenq;
+				std::complex<double> u = vals[i + j];
+				std::complex<double> v = vals[i + j + lenh];
+				v *= ksiPows[idx];
+				vals[i + j] = u + v;
+				vals[i + j + lenh] = u - v;
+			}
+		}
+	}
+}  
+
+void Context::fftSpecialInv(std::complex<double> *vals, const long size) const{
+  uint64_t M = degree__ << 1;
+  for (long len = size; len >= 1; len >>= 1) {
+		for (long i = 0; i < size; i += len) {
+			long lenh = len >> 1;
+			long lenq = len << 2;
+			for (long j = 0; j < lenh; ++j) {
+				long idx = (lenq - (rotGroup[j] % lenq)) * M / lenq;
+				std::complex<double> u = vals[i + j] + vals[i + j + lenh];
+				std::complex<double> v = vals[i + j] - vals[i + j + lenh];
+				v *= ksiPows[idx];
+				vals[i + j] = u;
+				vals[i + j + lenh] = v;
+			}
+		}
+	}
+	arrayBitReverse(vals, size);
+
+  for (int i = 0; i < size; i++){
+    vals[i] /= size;
+  }
+}
+  
+// Note that `mvec` is overwritten.
+void Context::Encode(uint64_t *out, std::complex<double> *mvec, const int slot) const{
+  // fft
+  fftSpecialInv(mvec, slot);
+
+  // scale
+  for (int i = 0; i < slot; i++){
+    mvec[i] *= (1 << 20);
+  }
+
+  const int Nh = degree__ >> 1;
+  uint64_t gap = Nh / slot;
+  for (int i = 0; i < param__.chain_length_; ++i){
+    uint64_t *mi = out + i * degree__;
+    for (int j = 0, jdx = Nh, idx = 0; j < slot; ++j, jdx += gap, idx += gap){
+      long mir = mvec[j].real();
+      long mii = mvec[j].imag();
+      mi[idx] = mir >= 0 ? (uint64_t) mir : (uint64_t) (param__.primes_[i] + mir);
+      mi[jdx] = mii >= 0 ? (uint64_t) mii : (uint64_t) (param__.primes_[i] + mii);
+    }
+  }
+}
+
+// Note that `a` is overwritten.
+void Context::Decode(std::complex<double> *out, uint64_t *a, const int slots) const{
+  const int Nh = degree__ >> 1;
+  uint64_t gap = Nh / slots;
+  
+  uint64_t pr = param__.primes_[0];
+	uint64_t pr_2 = param__.primes_[0] / 2;
+  
+  // TODO: scale 
+  int p = (1 << 20);
+
+	for (long j = 0, jdx = Nh, idx = 0; j < slots; ++j, jdx += gap, idx += gap) {
+		double mir = a[idx] <= pr_2 ? ((double) (a[idx]) / p) : (((double) (a[idx]) - (double) (pr)) / p);
+		double mii = a[jdx] <= pr_2 ? ((double) (a[jdx]) / p) : (((double) (a[jdx]) - (double) (pr)) / p);
+		out[j].real(mir);
+		out[j].imag(mii);
+	}
+	fftSpecial(out, slots);
+}
+
 
 // NTT is made up of two NTT stages. Here the 'first' means the first NTT
 // stage in NTT (so it becomes second in view of iNTT).

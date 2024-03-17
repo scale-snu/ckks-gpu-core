@@ -18,8 +18,6 @@
 #include "public/Parameter.h"
 #include "public/Test.h"
 
-#include "seal/seal.h"
-
 class E2ETest : public ckks::Test,
                    public ::testing::TestWithParam<ckks::Parameter> {
  protected:
@@ -28,6 +26,14 @@ class E2ETest : public ckks::Test,
   void COMPARE(const ckks::DeviceVector& ref,
                const ckks::DeviceVector& out) const {
     ASSERT_EQ(ckks::HostVector(ref), ckks::HostVector(out));
+  }
+
+  void COMPARE_APPROXIMATE(std::complex<double> *ref,
+                           std::complex<double> *out, int size) const {
+    for (size_t i = 0; i < size; i++) {
+      ASSERT_NEAR(ref[i].real(), out[i].real(), 1e-3);
+      ASSERT_NEAR(ref[i].imag(), out[i].imag(), 1e-3);
+    }
   }
 
   template <typename T>
@@ -40,61 +46,23 @@ class E2ETest : public ckks::Test,
   }
 };
 
-TEST_P(E2ETest, Client) {
-  const int slots = 8;
+TEST_P(E2ETest, Encode) {
+  int slots = 8;
   std::complex<double> *mvec = new std::complex<double>[slots];
+  std::complex<double> *mvec_ref = new std::complex<double>[slots];
+  std::complex<double> *mvec_decoded = new std::complex<double>[slots];
+  uint64_t *mvec_encoded = new uint64_t[param.chain_length_ << param.log_degree_];
+
+
   for (int i = 0; i < slots; i++) {
     mvec[i] = std::complex<double>(i, i);
+    mvec_ref[i] = std::complex<double>(i, i);
   }
 
-  // Client operation using SEAL
-  seal::EncryptionParameters parms(seal::scheme_type::ckks);
-  size_t poly_modulus_degree = 8192;
-  parms.set_poly_modulus_degree(poly_modulus_degree);
-  parms.set_coeff_modulus(seal::CoeffModulus::Create(poly_modulus_degree, { 60, 40, 40, 60 }));
+  context.Encode(mvec_encoded, mvec, slots);
+  context.Decode(mvec_decoded, mvec_encoded, slots);
 
-  seal::SEALContext context(parms);
-  seal::CKKSEncoder encoder(context);
-
-  seal::KeyGenerator keygen(context);
-  auto secret_key = keygen.secret_key();
-  seal::PublicKey public_key;
-  keygen.create_public_key(public_key);
-  seal::Encryptor encryptor(context, public_key);
-  seal::Decryptor decryptor(context, secret_key);
-
-  double scale = pow(2.0, 40);
-  size_t slot_count = encoder.slot_count();
-  cout << "Number of slots: " << slot_count << endl;
-  
-  vector<double> input_x;
-  input_x.reserve(slot_count);
-  for (size_t i = 0; i < slot_count; i++)
-  {
-      input_x.push_back(i);
-  }
-  print_vector(input_x, 10);
-
-  // Encode
-  seal::Plaintext encode_x;
-  encoder.encode(input_x, scale, encode_x);
-
-  // Encrypt
-  seal::Ciphertext encrypt_x;
-  encryptor.encrypt(encode_x, encrypt_x);
-
-  // Some operations
-  seal::Ciphertext result_x = encrypt_x;
-
-  // Decrypt
-  seal::Plaintext decrypt_x;
-  decryptor.decrypt(result_x, decrypt_x);
-
-  // Decode with SEAL
-  vector<double> decode_x;
-  encoder.decode(decrypt_x, decode_x);
-  print_vector(decode_x, 10);
-  delete[] mvec;  
+  COMPARE_APPROXIMATE(mvec_ref, mvec_decoded, slots);
 }
 
 INSTANTIATE_TEST_SUITE_P(Params, E2ETest,

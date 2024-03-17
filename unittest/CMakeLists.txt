@@ -16,6 +16,5 @@ ADD_EXECUTABLE(FusionTest
 ADD_EXECUTABLE(E2ETest
   public/E2ETest.cpp
 )
-target_include_directories(E2ETest PUBLIC ${CMAKE_SOURCE_DIR}/thirdparty/SEAL/install/include/SEAL-4.1/)
 TARGET_LINK_LIBRARIES(FusionTest PRIVATE DeviceFunctions gtest_main)
-TARGET_LINK_LIBRARIES(E2ETest PRIVATE DeviceFunctions gtest_main  ${CMAKE_SOURCE_DIR}/thirdparty/SEAL/install/lib/libseal-4.1.a)
+TARGET_LINK_LIBRARIES(E2ETest PRIVATE DeviceFunctions gtest_main)
