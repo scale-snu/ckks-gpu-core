@@ -123,6 +123,20 @@ class Benchmark {
     Run("BatchedPtxtCtxtMAD", BatchMAD, op1, op2);
   }
 
+  void NttBench() {
+    // Prepare random poly across current chain length
+    auto poly_shoup = ckks.GetRandomPolyRNS(param.chain_length_);
+    auto poly_mont = poly_shoup; // copy
+    auto inv_shoup = poly_shoup;
+    auto inv_mont = poly_shoup;
+    const int start_prime_idx = 0;
+    const int batch = param.chain_length_;
+    Run("NTT-Shoup", [&](auto &v) { ckks.context.ToNTTInplaceShoup(v, start_prime_idx, batch); }, poly_shoup);
+    Run("NTT-Mont", [&](auto &v) { ckks.context.ToNTTInplaceMont(v, start_prime_idx, batch); }, poly_mont);
+    Run("iNTT-Shoup", [&](auto &v) { ckks.context.FromNTTInplaceShoup(v, start_prime_idx, batch); }, poly_shoup);
+    Run("iNTT-Mont", [&](auto &v) { ckks.context.FromNTTInplaceMont(v, start_prime_idx, batch); }, poly_mont);
+  }
+
  private:
   Test ckks;
   Parameter param;
@@ -132,5 +146,6 @@ class Benchmark {
 int main() {
   // Benchmark bench(PARAM_LARGE_DNUM);
   Benchmark bench(PARAM_SMALL_DNUM);
+  bench.NttBench();
   return 0;
 }

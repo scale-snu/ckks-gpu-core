@@ -162,6 +162,39 @@ __inline__ __device__ uint64_t sub_negate_const_mult(const uint64_t op1,
   return out;
 };
 
+// Montgomery reduction for 64-bit moduli using R = 2^64.
+// Computes REDC(T) = (T + ((T.lo * nprime) mod 2^64) * p) / 2^64, returns in [0, 2p).
+// Caller should conditionally subtract p if needed.
+// nprime = -p^{-1} mod 2^64
+__inline__ __device__ uint64_t montgomery_reduce_128_64(uint128_t T,
+                                                        const uint64_t p,
+                                                        const uint64_t nprime) {
+  // m = (T.lo * nprime) mod 2^64
+  const uint64_t m = T.lo * nprime;
+  // m * p (128-bit)
+  const uint128_t mp = mult_64_64_128(m, p);
+  // T + m*p (128-bit)
+  uint64_t lo_sum, hi_sum;
+  asm("add.cc.u64 %0, %1, %2;\n\t"
+      "addc.u64 %3, %4, %5;\n\t"
+      : "=l"(lo_sum), "=l"(hi_sum)
+      : "l"(mp.lo), "l"(mp.hi), "l"(T.lo), "l"(T.hi));
+  // Take the high 64 bits (division by R)
+  uint64_t t = hi_sum;
+  if (t >= p) t -= p;
+  return t;
+}
+
+// Multiply a * b modulo p using Montgomery REDC with R=2^64.
+// Requires b to be in Montgomery domain (i.e., b = b_plain * R mod p).
+__inline__ __device__ uint64_t mont_mul_montified_const(const uint64_t a,
+                                                        const uint64_t bR,
+                                                        const uint64_t p,
+                                                        const uint64_t nprime) {
+  const uint128_t T = mult_64_64_128(a, bR);
+  return montgomery_reduce_128_64(T, p, nprime);
+}
+
 __inline__ __device__ uint128_t& uint128_t::operator+=(const uint128_t& op) {
   inplace_add_128_128(op, *this);
   return *this;

@@ -136,6 +136,29 @@ auto ShoupEach(const std::vector<word64> &in, const word64 prime) {
   return shoup;
 }
 
+auto MontNPrime(const word64 p) {
+  // nprime = -p^{-1} mod 2^64
+  unsigned __int128 t = 1;
+  // Use Newton-Raphson to invert modulo 2^64
+  uint64_t x = 1;
+  for (int i = 0; i < 6; i++) {
+    x *= (2 - p * x);
+  }
+  uint64_t pinv = x;  // p^{-1} mod 2^64
+  return (uint64_t)(0 - pinv);
+}
+
+auto MulR(const std::vector<word64> &vals, const word64 p) {
+  std::vector<word64> out(vals.size());
+  unsigned __int128 R = (unsigned __int128)1 << 64;  // 2^64
+  uint64_t Rmod = (uint64_t)(R % p);
+  for (size_t i = 0; i < vals.size(); i++) {
+    unsigned __int128 t = (unsigned __int128)vals[i] * Rmod;
+    out[i] = (uint64_t)(t % p);
+  }
+  return out;
+}
+
 auto DivTwo(const std::vector<word64> &in, const word64 prime) {
   const auto two_inv = Inverse(2, prime);
   std::vector<word64> out(in.size());
@@ -225,8 +248,9 @@ Context::Context(const Parameter &param)
       alpha__{param.alpha_},
       primes__{param.primes_} {
   HostVector barret_k, barret_ratio, power_of_roots_vec,
-      power_of_roots_shoup_vec, inv_power_of_roots_vec,
-      inv_power_of_roots_shoup_vec;
+      power_of_roots_shoup_vec, power_of_roots_mont_vec,
+      inv_power_of_roots_vec, inv_power_of_roots_shoup_vec,
+      inv_power_of_roots_div_two_mont_vec, mont_nprime_host;
   for (auto p : param.primes_) {
     long barret = floor(log2(p)) + 63;
     barret_k.push_back(barret);
@@ -238,20 +262,29 @@ Context::Context(const Parameter &param)
     auto [power_of_roots, inverse_power_of_roots] =
         genBitReversedTwiddleFacotrs(root, p, degree__);
     auto power_of_roots_shoup = ShoupEach(power_of_roots, p);
+    auto power_of_roots_mont = MulR(power_of_roots, p);
     auto inv_power_of_roots_div_two = DivTwo(inverse_power_of_roots, p);
     auto inv_power_of_roots_shoup = ShoupEach(inv_power_of_roots_div_two, p);
+    auto inv_power_of_roots_div_two_mont = MulR(inv_power_of_roots_div_two, p);
     Append(power_of_roots_vec, power_of_roots);
     Append(power_of_roots_shoup_vec, power_of_roots_shoup);
+    Append(power_of_roots_mont_vec, power_of_roots_mont);
     Append(inv_power_of_roots_vec, inv_power_of_roots_div_two);
     Append(inv_power_of_roots_shoup_vec, inv_power_of_roots_shoup);
+    Append(inv_power_of_roots_div_two_mont_vec, inv_power_of_roots_div_two_mont);
+    mont_nprime_host.push_back(MontNPrime(p));
   }
   barret_ratio__ = DeviceVector(barret_ratio);
   barret_k__ = DeviceVector(barret_k);
   power_of_roots__ = DeviceVector(power_of_roots_vec);
   power_of_roots_shoup__ = DeviceVector(power_of_roots_shoup_vec);
+  power_of_roots_mont__ = DeviceVector(power_of_roots_mont_vec);
   inverse_power_of_roots_div_two__ = DeviceVector(inv_power_of_roots_vec);
   inverse_scaled_power_of_roots_div_two__ =
       DeviceVector(inv_power_of_roots_shoup_vec);
+  inverse_power_of_roots_div_two_mont__ =
+      DeviceVector(inv_power_of_roots_div_two_mont_vec);
+  mont_nprime__ = DeviceVector(mont_nprime_host);
   // make base-conversion-related parameters
   GenModUpParams();
   GenModDownParams();
@@ -712,6 +745,51 @@ void Context::ToNTTInplace(word64 *op, int start_prime_idx, int batch) const {
       op, first_stage_radix_size, batch, degree__, start_prime_idx,
       second_radix_size / per_thread_ntt_size, power_of_roots__.data(),
       power_of_roots_shoup__.data(), primes__.data());
+  CudaCheckError();
+}
+
+void Context::ToNTTInplaceMont(DeviceVector &op1, int start_prime_idx, int batch) const {
+  dim3 gridDim(2048);
+  dim3 blockDim(256);
+  const int per_thread_ntt_size = 8;
+  const int first_stage_radix_size = 256;
+  const int second_radix_size = degree__ / first_stage_radix_size;
+  const int pad = 4;
+  const int per_thread_storage =
+      blockDim.x * per_thread_ntt_size * sizeof(word64);
+  Ntt8PointPerThreadPhase1Mont<<<gridDim, (first_stage_radix_size / 8) * pad,
+                                 (first_stage_radix_size + pad + 1) * pad *
+                                     sizeof(uint64_t)>>>(
+      op1.data(), 1, batch, degree__, start_prime_idx, pad,
+      first_stage_radix_size / per_thread_ntt_size, power_of_roots_mont__.data(),
+      primes__.data(), mont_nprime__.data());
+  Ntt8PointPerThreadPhase2Mont<<<gridDim, blockDim.x, per_thread_storage>>>(
+      op1.data(), first_stage_radix_size, batch, degree__, start_prime_idx,
+      second_radix_size / per_thread_ntt_size, power_of_roots_mont__.data(),
+      primes__.data(), mont_nprime__.data());
+  CudaCheckError();
+}
+
+void Context::FromNTTInplaceMont(DeviceVector &op1, int start_prime_idx, int batch) const {
+  dim3 gridDim(2048);
+  dim3 blockDim(256);
+  const int per_thread_ntt_size = 8;
+  const int first_stage_radix_size = 256;
+  const int second_radix_size = degree__ / first_stage_radix_size;
+  const int pad = 4;
+  const int per_thread_storage =
+      blockDim.x * per_thread_ntt_size * sizeof(word64);
+  Intt8PointPerThreadPhase2Mont<<<gridDim, blockDim, per_thread_storage>>>(
+      op1.data(), first_stage_radix_size, batch, degree__, start_prime_idx,
+      second_radix_size / per_thread_ntt_size,
+      inverse_power_of_roots_div_two_mont__.data(), primes__.data(),
+      mont_nprime__.data(), op1.data());
+  Intt8PointPerThreadPhase1Mont<<<gridDim, (first_stage_radix_size / 8) * pad,
+                                  (first_stage_radix_size + pad + 1) * pad *
+                                      sizeof(uint64_t)>>>(
+      op1.data(), 1, batch, degree__, start_prime_idx, pad,
+      first_stage_radix_size / 8, inverse_power_of_roots_div_two_mont__.data(),
+      primes__.data(), mont_nprime__.data(), op1.data());
   CudaCheckError();
 }
 

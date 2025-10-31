@@ -66,4 +66,25 @@ __global__ void Ntt8PointPerThreadPhase2(
     const int start_prime_idx, const int radix, const word64 *base_inv,
     const word64 *base_inv_, const word64 *primes);
 
+// Montgomery variants (use twiddles in Montgomery domain and nprimes)
+__global__ void Ntt8PointPerThreadPhase1Mont(
+    uint64_t *op, const int m, const int num_prime, const int N,
+    const int start_prime_idx, const int pad, const int radix,
+    const word64 *W_mont, const word64 *primes, const word64 *nprimes);
+
+__global__ void Ntt8PointPerThreadPhase2Mont(
+    uint64_t *op, const int m, const int num_prime, const int N,
+    const int start_prime_idx, const int radix, const word64 *W_mont,
+    const word64 *primes, const word64 *nprimes);
+
+__global__ void Intt8PointPerThreadPhase2Mont(
+    const word64 *in, const int m, const int num_prime, const int N,
+    const int start_prime_idx, const int radix, const word64 *WInv_mont,
+    const word64 *primes, const word64 *nprimes, word64 *out);
+
+__global__ void Intt8PointPerThreadPhase1Mont(
+    const word64 *in, const int m, const int num_prime, const int N,
+    const int start_prime_idx, int pad, int radix, const word64 *WInv_mont,
+    const word64 *primes, const word64 *nprimes, word64 *out);
+
 }  // namespace ckks

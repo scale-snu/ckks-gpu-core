@@ -40,6 +40,15 @@ class Context {
   auto GetDegree() const { return degree__; }
   void ModDown(DeviceVector& from, DeviceVector& to,
                long target_chain_idx) const;
+  // Expose NTT/iNTT entrypoints for benchmarking
+  void ToNTTInplaceShoup(DeviceVector& op1, int start_prime_idx, int batch) const {
+    ToNTTInplace(op1.data(), start_prime_idx, batch);
+  }
+  void FromNTTInplaceShoup(DeviceVector& op1, int start_prime_idx, int batch) const {
+    FromNTTInplace(op1.data(), start_prime_idx, batch);
+  }
+  void ToNTTInplaceMont(DeviceVector& op1, int start_prime_idx, int batch) const;
+  void FromNTTInplaceMont(DeviceVector& op1, int start_prime_idx, int batch) const;
   bool is_modup_batched = true;
   bool is_moddown_fused = true;
   bool is_keyswitch_fused = true;
@@ -95,8 +104,11 @@ class Context {
   DeviceVector barret_k__;
   DeviceVector power_of_roots__;
   DeviceVector power_of_roots_shoup__;
+  DeviceVector power_of_roots_mont__;
   DeviceVector inverse_power_of_roots_div_two__;
   DeviceVector inverse_scaled_power_of_roots_div_two__;
+  DeviceVector inverse_power_of_roots_div_two_mont__;
+  DeviceVector mont_nprime__;
   // for modup
   // {prod q_i}_{n * alpha <= i < (n+1) * alpha)} mod q_j
   // for j not in [n * alpha, n * alpha + alpha) for n in [0, dnum)
